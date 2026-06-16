@@ -14,6 +14,20 @@ load_dotenv()
 
 app = FastAPI()
 
+def setup_cookies():
+    """Create youtube_cookies.txt from environment variable"""
+    cookie_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "youtube_cookies.txt")
+    
+    if not os.path.exists(cookie_path):
+        cookies_str = os.getenv("YT_COOKIES")
+        if cookies_str:
+            try:
+                with open(cookie_path, "w") as f:
+                    f.write(cookies_str)
+                print("✅ Created youtube_cookies.txt from YT_COOKIES env variable")
+            except Exception as e:
+                print(f"⚠️ Failed to create cookies file: {e}")
+
 def init_ytmusic():
     """Try OAuth first, fall back to guest mode"""
     oauth_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "oauth.json")
@@ -63,7 +77,7 @@ def init_ytmusic():
     print("ℹ️ Using guest mode (no OAuth)")
     return YTMusic(location="IN", language="en")
 
-
+setup_cookies()
 yt = init_ytmusic()
 
 app.add_middleware(
