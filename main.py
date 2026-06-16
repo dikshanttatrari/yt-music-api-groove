@@ -185,7 +185,7 @@ def extract_stream_url(video_id: str) -> dict:
                 http_headers["Origin"] = "https://music.youtube.com"
             
             ydl_opts = {
-                "format": "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best",
+                "format": "bestaudio/best",
                 "quiet": True,
                 "no_warnings": True,
                 "skip_download": True,
