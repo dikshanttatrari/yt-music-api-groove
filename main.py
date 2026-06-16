@@ -12,9 +12,6 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
-
-app = FastAPI()
-
 app = FastAPI()
 
 def init_ytmusic():
