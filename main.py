@@ -99,14 +99,27 @@ def clear_cached_stream(video_id: str):
 
 
 def extract_stream_url(video_id: str) -> dict:
-    """Extract stream URL with multiple client fallbacks"""
+    """Extract stream URL with OAuth token + multiple client fallbacks"""
     
     cached = get_cached_stream(video_id)
     if cached:
         print(f"✅ Cache HIT: {video_id}")
         return cached
 
-    # Try clients in order of reliability
+    # Read OAuth access token to pass to yt-dlp
+    oauth_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "oauth.json")
+    access_token = None
+    if os.path.exists(oauth_path):
+        try:
+            import json
+            with open(oauth_path) as f:
+                oauth_data = json.load(f)
+                access_token = oauth_data.get("access_token")
+                if access_token:
+                    print(f"🔑 Using OAuth access token for yt-dlp")
+        except Exception as e:
+            print(f"⚠️ Couldn't read oauth token: {e}")
+
     clients_to_try = [
         {
             "name": "Android Music",
@@ -119,6 +132,11 @@ def extract_stream_url(video_id: str) -> dict:
             "user_agent": "com.google.android.youtube/19.29.37 (Linux; U; Android 11) gzip",
         },
         {
+            "name": "Android Testsuite",
+            "client": "android_testsuite",
+            "user_agent": "com.google.android.youtube/1.9 (Linux; U; Android 14) gzip",
+        },
+        {
             "name": "iOS",
             "client": "ios",
             "user_agent": "com.google.ios.youtube/19.29.1 (iPhone14,3; U; CPU iOS 15_6 like Mac OS X)",
@@ -126,11 +144,11 @@ def extract_stream_url(video_id: str) -> dict:
         {
             "name": "TV Embedded",
             "client": "tv_embedded",
-            "user_agent": "Mozilla/5.0 (SMART-TV; Linux; Tizen 5.0) AppleWebKit/538.1",
+            "user_agent": "Mozilla/5.0 (SMART-TV; Linux; Tizen 5.0)",
         },
         {
-            "name": "Web",
-            "client": "web",
+            "name": "Web Embedded",
+            "client": "web_embedded",
             "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0",
         },
     ]
@@ -141,6 +159,17 @@ def extract_stream_url(video_id: str) -> dict:
         try:
             print(f"🔄 Trying client: {client['name']} for {video_id}")
             
+            http_headers = {
+                "User-Agent": client["user_agent"],
+                "Accept-Language": "en-US,en;q=0.9",
+            }
+            
+            # Inject OAuth token as Authorization header!
+            if access_token:
+                http_headers["Authorization"] = f"Bearer {access_token}"
+                http_headers["X-Goog-AuthUser"] = "0"
+                http_headers["Origin"] = "https://music.youtube.com"
+            
             ydl_opts = {
                 "format": "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best",
                 "quiet": True,
@@ -149,14 +178,15 @@ def extract_stream_url(video_id: str) -> dict:
                 "nocheckcertificate": True,
                 "geo_bypass": True,
                 "geo_bypass_country": "IN",
+                "socket_timeout": 30,
+                "retries": 3,
                 "extractor_args": {
                     "youtube": {
                         "player_client": [client["client"]],
+                        "skip": ["hls", "dash"],
                     }
                 },
-                "http_headers": {
-                    "User-Agent": client["user_agent"],
-                },
+                "http_headers": http_headers,
             }
 
             # Add cookies if available
@@ -166,10 +196,11 @@ def extract_stream_url(video_id: str) -> dict:
             )
             if os.path.exists(cookie_path):
                 ydl_opts["cookiefile"] = cookie_path
+                print(f"🍪 Using cookies file")
 
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(
-                    f"https://music.youtube.com/watch?v={video_id}",
+                    f"https://www.youtube.com/watch?v={video_id}",
                     download=False
                 )
 
@@ -195,7 +226,7 @@ def extract_stream_url(video_id: str) -> dict:
                 return stream_info
 
         except Exception as e:
-            print(f"❌ {client['name']} failed: {str(e)[:100]}")
+            print(f"❌ {client['name']} failed: {str(e)[:150]}")
             last_error = e
             continue
 
